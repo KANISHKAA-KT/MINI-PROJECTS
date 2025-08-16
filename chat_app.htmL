@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Messenger App</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.2.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.2.1/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.2.1/firebase-firestore.js"></script>
+  <style>
+    /* Typing indicator animation */
+    @keyframes blink {
+      0% { opacity: 0.2; }
+      20% { opacity: 1; }
+      100% { opacity: 0.2; }
+    }
+    .typing-dot {
+      animation: blink 1.4s infinite;
+    }
+    .typing-dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+    .typing-dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+    /* Smooth transitions */
+    .transition-all {
+      transition: all 0.3s ease;
+    }
+    /* Message bubbles */
+    .message-in {
+      background-color: #f1f1f1;
+      border-top-left-radius: 0;
+    }
+    .message-out {
+      background-color: #007bff;
+      color: white;
+      border-top-right-radius: 0;
+    }
+    /* Scrollbar styling */
+    .messages-container::-webkit-scrollbar {
+      width: 6px;
+    }
+    .messages-container::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    .messages-container::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col">
+  <!-- Auth Screen -->
+  <div id="auth-screen" class="flex flex-col items-center justify-center h-full">
+    <div class="bg-white p-8 rounded-lg shadow-lg w-full max-w-sm">
+      <h1 class="text-2xl font-bold text-center mb-6">Messenger</h1>
+      <div id="auth-tabs" class="flex mb-6 border-b">
+        <button id="tab-login" class="flex-1 py-2 font-medium text-center border-b-2 border-blue-500 text-blue-500">Login</button>
+        <button id="tab-signup" class="flex-1 py-2 font-medium text-center text-gray-500">Sign Up</button>
+      </div>
+      
+      <form id="login-form" class="space-y-4">
+        <div>
+          <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+          <input type="email" id="login-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div>
+          <label for="login-password" class="block text-sm font-medium text-gray-700">Password</label>
+          <input type="password" id="login-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+          Login
+        </button>
+      </form>
+      
+      <form id="signup-form" class="hidden space-y-4">
+        <div>
+          <label for="signup-name" class="block text-sm font-medium text-gray-700">Name</label>
+          <input type="text" id="signup-name" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div>
+          <label for="signup-email" class="block text-sm font-medium text-gray-700">Email</label>
+          <input type="email" id="signup-email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div>
+          <label for="signup-password" class="block text-sm font-medium text-gray-700">Password</label>
+          <input type="password" id="signup-password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <button type="submit" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+          Sign Up
+        </button>
+      </form>
+    </div>
+  </div>
+  
+  <!-- Chat Screen -->
+  <div id="chat-screen" class="hidden flex flex-col h-full max-w-4xl mx-auto w-full">
+    <!-- Header -->
+    <div class="bg-white border-b border-gray-200 p-4 flex items-center justify-between shadow-sm">
+      <div class="flex items-center space-x-3">
+        <img src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/d66cd53d-474a-410e-84d5-b4634ded8556.png" alt="Profile picture of John Doe" class="w-10 h-10 rounded-full">
+        <div>
+          <h2 class="font-medium">John Doe</h2>
+          <div id="typing-indicator" class="text-xs text-gray-500 h-4"></div>
+        </div>
+      </div>
+      <button id="logout-btn" class="text-gray-500 hover:text-gray-700">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+        </svg>
+      </button>
+    </div>
+    
+    <!-- Messages -->
+    <div id="messages" class="messages-container flex-1 p-4 overflow-y-auto space-y-3">
+      <div class="flex justify-start">
+        <div class="max-w-xs md:max-w-md lg:max-w-lg rounded-lg p-3 message-in">
+          <p>Hey there! How are you doing today?</p>
+          <p class="text-xs text-gray-500 mt-1 flex items-center">
+            10:30 AM <span class="ml-1 text-gray-400">✓✓</span>
+          </p>
+        </div>
+      </div>
+      <div class="flex justify-end">
+        <div class="max-w-xs md:max-w-md lg:max-w-lg rounded-lg p-3 message-out">
+          <p>I'm doing great! Just working on this new chat app. How about you?</p>
+          <p class="text-xs text-white/70 mt-1 flex items-center justify-end">
+            10:32 AM <span class="ml-1">✓✓</span>
+          </p>
+        </div>
+      </div>
+      <div class="flex justify-start">
+        <div class="max-w-xs md:max-w-md lg:max-w-lg rounded-lg p-3 message-in">
+          <p>That sounds interesting! What technologies are you using?</p>
+          <p class="text-xs text-gray-500 mt-1 flex items-center">
+            10:33 AM <span class="ml-1 text-gray-400">✓✓</span>
+          </p>
+        </div>
+      </div>
+      <div class="flex justify-start items-end">
+        <div class="bg-gray-100 rounded-full p-2 flex space-x-1" id="other-typing-indicator">
+          <div class="typing-dot w-2 h-2 bg-gray-400 rounded-full"></div>
+          <div class="typing-dot w-2 h-2 bg-gray-400 rounded-full"></div>
+          <div class="typing-dot w-2 h-2 bg-gray-400 rounded-full"></div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Message Input -->
+    <div class="bg-white border-t border-gray-200 p-4">
+      <div class="flex items-center space-x-2">
+        <button id="attach-btn" class="text-gray-500 hover:text-gray-700 p-2 rounded-full hover:bg-gray-100">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+          </svg>
+        </button>
+        <input type="text" id="message-input" placeholder="Type a message..." class="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+        <button id="send-btn" class="bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M12 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Image Upload Modal (hidden by default) -->
+      <div id="image-upload-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg p-6 max-w-sm w-full">
+          <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-medium">Send an Image</h3>
+            <button id="cancel-upload" class="text-gray-500 hover:text-gray-700">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <div class="mb-4">
+            <input type="file" id="image-input" accept="image/*" class="hidden">
+            <button id="select-image-btn" class="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-medium py-2 px-4 rounded-md">
+              Select Image
+            </button>
+            <div id="image-preview" class="mt-4 hidden">
+              <img id="preview-img" src="" alt="Selected image preview" class="w-full rounded-md" src="https://storage.googleapis.com/workspace-0f70711f-8b4e-4d94-86f1-2a93ccde5887/image/cac843c0-0687-4fcb-8986-5de51feab81e.png">
+            </div>
+          </div>
+          <button id="send-image-btn" class="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md disabled:bg-blue-300" disabled>
+            Send Image
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Mock Firebase configuration
+    const firebaseConfig = {
+      apiKey: "mock-api-key",
+      authDomain: "mock-chat-app.firebaseapp.com",
+      projectId: "mock-chat-app",
+      storageBucket: "mock-chat-app.appspot.com",
+      messagingSenderId: "1234567890",
+      appId: "1:1234567890:web:abcdef1234567890"
+    };
+    
+    // Initialize Firebase (mocked for this demo)
+    // firebase.initializeApp(firebaseConfig);
+    // const auth = firebase.auth();
+    // const db = firebase.firestore();
+    
+    // DOM elements
+    const authScreen = document.getElementById('auth-screen');
+    const chatScreen = document.getElementById('chat-screen');
+    const loginForm = document.getElementById('login-form');
+    const signupForm = document.getElementById('signup-form');
+    const tabLogin = document.getElementById('tab-login');
+    const tabSignup = document.getElementById('tab-signup');
+    const messagesContainer = document.getElementById('messages');
+    const messageInput = document.getElementById('message-input');
+    const sendBtn = document.getElementById('send-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const attachBtn = document.getElementById('attach-btn');
+    const imageUploadModal = document.getElementById('image-upload-modal');
+    const selectImageBtn = document.getElementById('select-image-btn');
+    const imageInput = document.getElementById('image-input');
+    const previewImg = document.getElementById('preview-img');
+    const sendImageBtn = document.getElementById('send-image-btn');
+    const cancelUpload = document.getElementById('cancel-upload');
+    const imagePreview = document.getElementById('image-preview');
+    const typingIndicator = document.getElementById('typing-indicator');
+    const otherTypingIndicator = document.getElementById('other-typing-indicator');
+    
+    // State
+    let currentUser = null;
+    let isTyping = false;
+    let typingTimer = null;
+    
+    // Tab switching
+    tabLogin.addEventListener('click', () => {
+      tabLogin.classList.add('border-blue-500', 'text-blue-500');
+      tabLogin.classList.remove('text-gray-500');
+      tabSignup.classList.add('text-gray-500');
+      tabSignup.classList.remove('border-blue-500', 'text-blue-500');
+      loginForm.classList.remove('hidden');
+      signupForm.classList.add('hidden');
+    });
+    
+    tabSignup.addEventListener('click', () => {
+      tabSignup.classList.add('border-blue-500', 'text-blue-500');
+      tabSignup.classList.remove('text-gray-500');
+      tabLogin.classList.add('text-gray-500');
+      tabLogin.classList.remove('border-blue-500', 'text-blue-500');
+      signupForm.classList.remove('hidden');
+      loginForm.classList.add('hidden');
+    });
+    
+    // Mock login
+    loginForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const email = document.getElementById('login-email').value;
+      const password = document.getElementById('login-password').value;
+      
+      // In a real app, you would use:
+      // auth.signInWithEmailAndPassword(email, password)
+      //   .then((userCredential) => {
+      //     currentUser = userCredential.user;
+      //     showChatScreen();
+      //   })
+      //   .catch((error) => {
+      //     alert(error.message);
+      //   });
+      
+      // For demo purposes, just log in
+      currentUser = { email, uid: 'demo-user-123', displayName: 'You' };
+      showChatScreen();
+    });
+    
+    // Mock signup
+    signupForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const name = document.getElementById('signup-name').value;
+      const email = document.getElementById('signup-email').value;
+      const password = document.getElementById('signup-password').value;
+      
+      // In a real app, you would use:
+      // auth.createUserWithEmailAndPassword(email, password)
+      //   .then((userCredential) => {
+      //     return userCredential.user.updateProfile({
+      //       displayName: name
+      //     });
+      //   })
+      //   .then(() => {
+      //     currentUser = auth.currentUser;
+      //     showChatScreen();
+      //   })
+      //   .catch((error) => {
+      //     alert(error.message);
+      //   });
+      
+      // For demo purposes, just log in
+      currentUser = { email, uid: 'demo-user-123', displayName: name };
+      showChatScreen();
+    });
+    
+    // Logout
+    logoutBtn.addEventListener('click', () => {
+      // In a real app: auth.signOut();
+      currentUser = null;
+      authScreen.classList.remove('hidden');
+      chatScreen.classList.add('hidden');
+      
+      // Clear forms
+      document.getElementById('login-email').value = '';
+      document.getElementById('login-password').value = '';
+      document.getElementById('signup-name').value = '';
+      document.getElementById('signup-email').value = '';
+      document.getElementById('signup-password').value = '';
+    });
+    
+    // Send message
+    sendBtn.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        sendMessage();
+      }
+    });
+    
+    function sendMessage() {
+      const message = messageInput.value.trim();
+      if (message && currentUser) {
+        const timestamp = new Date();
+        
+        // In a real app, you would save to Firestore:
+        // db.collection('messages').add({
+        //   text: message,
+        //   senderId: currentUser.uid,
+        //   senderName: currentUser.displayName,
+        //   timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        //   status: 'sent'
+        // });
+        
+        // Display the message immediately (optimistic update)
+        addMessage(message, currentUser.uid, 'You', timestamp, 'out', 'delivered');
+        
+        messageInput.value = '';
+        
+        // Mock response after a delay
+        setTimeout(() => {
+          const responses = [
+            "That's interesting!",
+            "Tell me more about that.",
+            "I see what you mean.",
+            "What else is new?",
+            "How does that make you feel?",
+            "I agree with you."
+          ];
+          const randomResponse = responses[Math.floor(Math.random() * responses.length)];
+          
+          addMessage(randomResponse, 'other-user-123', 'John Doe', new Date(), 'in', 'delivered');
+        }, 1000 + Math.random() * 2000);
+      }
+    }
+    
+    // Typing indicator
+    messageInput.addEventListener('input', () => {
+      if (!isTyping) {
+        isTyping = true;
+        // In a real app, you would update a typing status in Firestore
+        console.log("User started typing");
+      }
+      
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(() => {
+        isTyping = false;
+        // In a real app, you would clear the typing status
+        console.log("User stopped typing");
+      }, 1000);
+    });
+    
+    // Mock receiving typing indicator
+    setInterval(() => {
+      if (Math.random() > 0.7) {
+        typingIndicator.textContent = "John Doe is typing...";
+        otherTypingIndicator.classList.remove('hidden');
+        
+        setTimeout(() => {
+          typingIndicator.textContent = "";
+          otherTypingIndicator.classList.add('hidden');
+        }, 2000);
+      }
+    }, 8000);
+    
+    // Image upload handling
+    attachBtn.addEventListener('click', () => {
+      imageUploadModal.classList.remove('hidden');
+    });
+    
+    cancelUpload.addEventListener('click', () => {
+      imageUploadModal.classList.add('hidden');
+      imagePreview.classList.add('hidden');
+      sendImageBtn.disabled = true;
+    });
+    
+    selectImageBtn.addEventListener('click', () => {
+      imageInput.click();
+    });
+    
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file && file.type.match('image.*')) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          previewImg.src = event.target.result;
+          imagePreview.classList.remove('hidden');
+          sendImageBtn.disabled = false;
+        };
+        reader.readAsDataURL(file);
+      }
+    });
+    
+    sendImageBtn.addEventListener('click', () => {
+      const timestamp = new Date();
+      // In a real app, you would upload to Firebase Storage first
+      // then save the download URL to Firestore
+      addMessage('', currentUser.uid, 'You', timestamp, 'out', 'delivered', previewImg.src);
+      
+      imageUploadModal.classList.add('hidden');
+      imagePreview.classList.add('hidden');
+      sendImageBtn.disabled = true;
+      imageInput.value = '';
+    });
+    
+    // Helper functions
+    function showChatScreen() {
+      authScreen.classList.add('hidden');
+      chatScreen.classList.remove('hidden');
+      
+      // In a real app, you would listen for new messages:
+      // db.collection('messages')
+      //   .orderBy('timestamp')
+      //   .onSnapshot((snapshot) => {
+      //     snapshot.docChanges().forEach((change) => {
+      //       if (change.type === 'added') {
+      //         const data = change.doc.data();
+      //         addMessage(data.text, data.senderId, data.senderName, data.timestamp.toDate(), data.senderId === currentUser.uid ? 'out' : 'in', data.status, data.imageUrl);
+      //       }
+      //     });
+      //   });
+    }
+    
+    function addMessage(text, senderId, senderName, timestamp, direction, status, imageUrl = null) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `flex ${direction === 'out' ? 'justify-end' : 'justify-start'}`;
+      
+      let statusIcon = '✓'; // single tick for sent
+      if (status === 'delivered') statusIcon = '✓✓'; // double tick for delivered
+      if (status === 'read') statusIcon = '✓✓<span class="text-blue-400">✓✓</span>'; // blue for read
+      
+      const timeString = timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      
+      let messageContent;
+      if (imageUrl) {
+        messageContent = `
+          <img src="${imageUrl}" alt="Image sent in chat" class="rounded-lg max-w-full h-auto mb-1">
+          <p class="text-xs ${direction === 'out' ? 'text-white/70' : 'text-gray-500'} mt-1 flex items-center ${direction === 'out' ? 'justify-end' : ''}">
+            ${timeString} <span class="ml-1">${direction === 'out' ? statusIcon : ''}</span>
+          </p>
+        `;
+      } else {
+        messageContent = `
+          <p>${text}</p>
+          <p class="text-xs ${direction === 'out' ? 'text-white/70' : 'text-gray-500'} mt-1 flex items-center ${direction === 'out' ? 'justify-end' : ''}">
+            ${timeString} <span class="ml-1">${direction === 'out' ? statusIcon : ''}</span>
+          </p>
+        `;
+      }
+      
+      messageDiv.innerHTML = `
+        <div class="max-w-xs md:max-w-md lg:max-w-lg rounded-lg p-3 message-${direction}">
+          ${messageContent}
+        </div>
+      `;
+      
+      messagesContainer.appendChild(messageDiv);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  </script>
+</body>
+</html>
+
